@@ -17,18 +17,19 @@ ray.init()  # Debug local_mode=True
 # ModelCatalog.register_custom_model("custom_cnn_v1", custom_cnn_v1)
 
 game_name = "AIBattleSim"
-file_name = "/builds/fps_env1_C2.app"  # None for editor
+file_name = None  # "/Users/wehrenberger/Code/AI_BATTLE_SIM/rllib_test/builds/fps_env1_C2.app"  # None for editor
 episode_horizon = 3000
 
 agent = "FPS_Agent"
 agent_a = "FPS_Agent_A"
 agent_b = "FPS_Agent_B"
 
-stop_iters = 9999
-stop_time_steps = 1_000_000
+stop_iters = 9999999
+stop_time_steps = 10_000_000
 stop_reward = 9999
 
 checkpoint_dir = "/Users/wehrenberger/Code/AI_BATTLE_SIM/rllib_test/checkpoints/battle_sim"
+checkpoint_continue_dir = "/Users/wehrenberger/Code/AI_BATTLE_SIM/rllib_test/checkpoints/battle_sim/PPO_2023-12-05_22-10-37/PPO_AIBattleSim_bca0e_00000_0_2023-12-05_22-10-37/checkpoint_005579"
 
 tune.register_env(
     game_name,
@@ -92,25 +93,27 @@ config = (
     .framework("torch")
     # For running in editor, force to use just one Worker
     .rollouts(
-        num_rollout_workers=4,
+        num_rollout_workers=1,
         rollout_fragment_length=200,
-        ignore_worker_failures=True
+        ignore_worker_failures=True,
+    )
+    .checkpointing(
     )
     .training(
         lr=0.0003,
         lambda_=0.95,
         gamma=0.99,
-        sgd_minibatch_size=256,
-        train_batch_size=4000,
-        num_sgd_iter=20,
+        sgd_minibatch_size=128,  # 256
+        train_batch_size=1000,  # 4000
+        num_sgd_iter=10,  # 20
         clip_param=0.2,
         model={
             "conv_filters": [
                 [16, [2, 2], 1],  # 16 filters, 3x3 kernel, stride 1
                 [32, [2, 2], 1],  # 32 filters, 3x3 kernel, stride 1
-                [64, [2, 2], 2],  # 64 filters, 3x3 kernel, stride 2
+                # [64, [2, 2], 2],  # 64 filters, 3x3 kernel, stride 2
             ],
-            "fcnet_hiddens": [1024, 1024],
+            "fcnet_hiddens": [256, 256],
             # "lstm_cell_size": 256,
             # "max_seq_len": 20,
             # "use_attention": True,  # Note: This option is not standard in RLlib
@@ -140,10 +143,15 @@ results = tune.Tuner(
         verbose=1,
         local_dir=checkpoint_dir,
         checkpoint_config=air.CheckpointConfig(
-            checkpoint_frequency=5,
+            checkpoint_frequency=500,
             checkpoint_at_end=True,
+            num_to_keep=10,
         ),
-    ),
+    )
 ).fit()
+
+# trainer = config.build()
+# trainer.restore(checkpoint_continue_dir)
+# trainer.train()
 
 ray.shutdown()

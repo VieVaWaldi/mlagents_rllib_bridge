@@ -131,7 +131,7 @@ if __name__ == "__main__":
         # For running in editor, force to use just one Worker (we only have
         # one Unity running)!
         .rollouts(
-            num_rollout_workers=2,
+            num_rollout_workers=1,
             rollout_fragment_length=200,
             ignore_worker_failures=True
         )
@@ -159,6 +159,8 @@ if __name__ == "__main__":
         "episode_reward_mean": args.stop_reward,
     }
 
+    checkpoint_dir = "/Users/wehrenberger/Code/AI_BATTLE_SIM/rllib_test/checkpoints/soccer"
+
     # Run the experiment.
     results = tune.Tuner(
         "PPO",
@@ -166,6 +168,7 @@ if __name__ == "__main__":
         run_config=air.RunConfig(
             stop=stop,
             verbose=1,
+            local_dir=checkpoint_dir,
             checkpoint_config=air.CheckpointConfig(
                 checkpoint_frequency=5,
                 checkpoint_at_end=True,
