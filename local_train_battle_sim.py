@@ -17,8 +17,8 @@ ray.init()  # Debug local_mode=True
 # ModelCatalog.register_custom_model("custom_cnn_v1", custom_cnn_v1)
 
 game_name = "AIBattleSim"
-file_name = "/home/lu72hip/mlagents_rllib_bridge/builds/FPSAgent/CentOS_FPSAgent_Env2_C2/env.x86_64"  # None for editor
-checkpoint_dir = f"/home/lu72hip/mlagents_rllib_bridge/checkpoints/{game_name}"
+file_name = "/Users/wehrenberger/Code/AI_BATTLE_SIM/rllib_test/builds/fps_env2_C2.app"  # None for editor
+checkpoint_dir = "/Users/wehrenberger/Code/AI_BATTLE_SIM/rllib_test/checkpoints/battle_sim"
 
 episode_horizon = 3000
 stop_time_steps = 1_000_000
@@ -91,8 +91,8 @@ config = (
     .framework("torch")
     # For running in editor, force to use just one Worker
     .rollouts(
-        num_rollout_workers=4,
-        rollout_fragment_length=200,
+        num_rollout_workers=12,
+        rollout_fragment_length="auto",
         ignore_worker_failures=True
     )
     .training(
