@@ -6,6 +6,7 @@ from gymnasium.spaces import Box, Tuple as TupleSpace
 
 import ray
 from ray import air, tune
+from ray.rllib.algorithms.ddppo import DDPPOConfig
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.env.wrappers.unity3d_env import Unity3DEnv
 from ray.rllib.policy.policy import PolicySpec
@@ -13,22 +14,8 @@ from ray.rllib.policy.policy import PolicySpec
 # ToDo
 # - calc right batch size
 
-print("HIIIIIIII 0")
-
-ray.shutdown()
-
-print("HIIIIIIII 1")
-
-# object_store_memory=20 * 1024 * 1024 * 1024
-ray.init()
-# ray.init(address='192.168.193.207:6379')
-# ray.init(address='auto')
-
-print("HIIIIIIII 2")
-
-ray.util.get_node_ip_address()
-
-print("HIIIIIIII 3")
+# ray.init()
+ray.init(address='192.168.194.13:6379', include_dashboard=True, dashboard_host='0.0.0.0', dashboard_port=8265)
 
 game_name = "AIBattleSim"
 agent = "FPS_Agent"
@@ -41,8 +28,8 @@ checkpoint_dir = f"/home/lu72hip/mlagents_rllib_bridge/checkpoints/{game_name}"
 episode_horizon = 3000
 stop_time_steps = 10_000_000
 
-NUM_ROLLOUT_WORKERS = 1
-NUM_GPUS = 0
+NUM_ROLLOUT_WORKERS = 22 # probably globally
+NUM_GPUS = 4 # probably per worker
 
 tune.register_env(
     game_name,
@@ -78,6 +65,7 @@ def policy_mapping_fn(agent_id, episode, worker, **kwargs):
 
 config = (
     PPOConfig()
+    # DDPPOConfig()
     .environment(
         game_name,
         env_config={
@@ -88,28 +76,41 @@ config = (
     .framework("torch")
     .rollouts(
         num_rollout_workers=NUM_ROLLOUT_WORKERS,
-        # num_envs_per_worker=NUM_ENVS_PER_WORKER,
-        rollout_fragment_length="auto"
-        # ignore_worker_failures=True
+        rollout_fragment_length="auto",
+        ignore_worker_failures=True,
+        recreate_failed_workers=True
     )
-    # .resources(
-    #     custom_resources_per_worker={"worker": 1}
-    # )
+    .resources(
+        num_gpus=NUM_GPUS,
+        placement_strategy="SPREAD",
+        
+        num_cpus_per_worker=20, # Each rollout worker gets 1 CPU
+        num_gpus_per_worker=0,  # Rollout workers do not use GPU
+
+        num_learner_workers=2,  # Number of workers for training
+        num_cpus_per_learner_worker=1,  # Each training worker gets 1 CPU
+        num_gpus_per_learner_worker=1,  # Each training worker gets 1 GPU
+
+        # custom_resources_per_worker={"gpu_node": 1}  # If using custom resources
+    )
+    .rl_module(_enable_rl_module_api=True)
     .training(
+        _enable_learner_api=True,
         lr=0.0003,
         lambda_=0.95,
         gamma=0.99,
-        sgd_minibatch_size=128,
-        train_batch_size=512, # THIS ONE
+        sgd_minibatch_size=1024,
+        train_batch_size=12288, # THIS ONE
         num_sgd_iter=10,
         clip_param=0.2,
         model={
             "conv_filters": [
                 [16, [2, 2], 1],  # 16 filters, 3x3 kernel, stride 1
-                # [32, [2, 2], 1],  # 32 filters, 3x3 kernel, stride 1
+                [32, [2, 2], 1],  # 32 filters, 3x3 kernel, stride 1
                 # [64, [2, 2], 2],  # 64 filters, 3x3 kernel, stride 2
             ],
-            "fcnet_hiddens": [256, 256], # 1024, 1024],
+            # "fcnet_hiddens": [256, 256]
+            "fcnet_hiddens": [1024, 1024, 1024, 1024],
             # "lstm_cell_size": 1024,
             # "max_seq_len": 256,
             # "use_attention": True,  # Note: This option is not standard in RLlib
@@ -118,10 +119,6 @@ config = (
         },
     )
     .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
-    # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
-    .resources(num_gpus=NUM_GPUS) #int(os.environ.get("RLLIB_NUM_GPUS", "0")))
-    .rl_module(_enable_rl_module_api=False)
-    .training(_enable_learner_api=False)
 )
 
 stop = {
@@ -131,19 +128,30 @@ stop = {
 }
 
 # Run the experiment.
-results = tune.Tuner(
-    "PPO",
-    param_space=config.to_dict(),
-    run_config=air.RunConfig(
-        stop=stop,
-        verbose=1,
-        local_dir=checkpoint_dir,
-        checkpoint_config=air.CheckpointConfig(
-            checkpoint_frequency=100,
-            checkpoint_at_end=True,
-            num_to_keep=10,
-        ),
-    )
-).fit()
+# results = tune.Tuner(
+#     "PPO",
+#     param_space=config.to_dict(),
+#     run_config=air.RunConfig( 
+#         stop=stop,
+#         verbose=1,
+#         local_dir=checkpoint_dir,
+#         checkpoint_config=air.CheckpointConfig(
+#             checkpoint_frequency=100,
+#             checkpoint_at_end=True,
+#             num_to_keep=10,
+#         ),
+#     )
+# ).fit()
+
+from ray.rllib.algorithms.algorithm import Algorithm
+algo = Algorithm.from_checkpoint("/home/lu72hip/mlagents_rllib_bridge/checkpoints/AIBattleSim/PPO_2023-12-12_21-22-28/PPO_AIBattleSim_2c3f1_00000_0_2023-12-12_21-22-29/checkpoint_000002")
+
+for i in range(1000):
+    for i in range(100):
+        result = algo.train()
+        print(result)
+    new_checkpoint = algo.save("/home/lu72hip/mlagents_rllib_bridge/checkpoints/custom/AIBattleSim/from_PPO_AIBattleSim_2c3f1_00000_0_2023-12-12_21-22-29_checkpoint_000002")
+
+
 
 ray.shutdown()
